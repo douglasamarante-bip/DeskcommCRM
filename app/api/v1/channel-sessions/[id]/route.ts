@@ -204,7 +204,25 @@ export async function GET(
       statusAoVivo: liveStatus,
       gravado: phoneNumber,
     });
-  } catch {
+  } catch (err) {
+    // O diálogo de exclusão precisa continuar utilizável mesmo quando o WAHA
+    // está indisponível. O impacto vem do banco e não depende do transporte.
+    if (impact) {
+      logger.warn("WAHA indisponível durante preflight de exclusão; usando estado do banco", {
+        requestId,
+        channel_session_id: id,
+        organization_id: activeOrg.orgId,
+        erro: err instanceof Error ? err.message : String(err),
+      });
+      return ok(
+        comImpacto({
+          ...session,
+          waha_configured: true,
+          live_status_unavailable: true,
+        }),
+        { requestId },
+      );
+    }
     return fail("connection_status_failed", "Não foi possível conferir a conexão. Tente novamente.", 502, { requestId });
   }
 
@@ -333,7 +351,7 @@ export async function DELETE(
   if (!session) return fail("not_found", t("Canal não encontrado."), 404, { requestId });
 
   const impact = await loadDeletionImpact(activeOrg.orgId, id);
-  const arquivar = impact.outcome === "archive";
+  let arquivar = impact.outcome === "archive";
 
   const now = new Date().toISOString();
   const patch: Record<string, unknown> = {
@@ -349,25 +367,60 @@ export async function DELETE(
    */
   let webhookOverride: "desfeito" | "sem_credencial" | "falhou" = "sem_credencial";
 
+  // Remover da lista não pode ficar refém da disponibilidade do transporte.
+  // Se a limpeza remota falhar, preservamos uma linha arquivada como tombstone
+  // e registramos que ainda existe limpeza pendente no WAHA.
+  let wahaCleanup: "nao_aplicavel" | "concluida" | "pendente" = "nao_aplicavel";
+
   if (session.provider === CHANNEL_PROVIDER_WAHA) {
     const waha = getWahaClient();
-    if (!waha) {
-      return fail(
-        "waha_not_configured",
-        t("O WhatsApp (WAHA) não está configurado neste ambiente (faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY) — sem ele o número não pode ser desconectado do aparelho."),
-        503,
-        { requestId },
-      );
-    }
+
     try {
+      // Uma reserva realmente em andamento continua bloqueando a exclusão: aí
+      // há mutação concorrente do mesmo canal e seguir poderia deixar estados
+      // impossíveis. Indisponibilidade do WAHA, por outro lado, é degradável.
       await assertWahaConnectionIdle(createAdminClient(), activeOrg.orgId, id);
-      await waha.logoutSession(session.waha_session_name as string);
-      await waha.deleteSession(session.waha_session_name as string);
     } catch (err) {
-      if (err instanceof ChannelConnectionError) return fail(err.code, "Uma conexão está em andamento. Aguarde e tente novamente.", err.status, { requestId });
-      await supabase.from("channel_sessions").update({ status: "FAILED", status_reason: "connection_repair_required", last_status_change_at: now })
-        .eq("organization_id", activeOrg.orgId).eq("id", id);
-      return fail("waha_error", wahaFriendlyError(err), 502, { requestId });
+      if (err instanceof ChannelConnectionError) {
+        return fail(
+          err.code,
+          t("Uma conexão está em andamento. Aguarde e tente novamente."),
+          err.status,
+          { requestId },
+        );
+      }
+      return fail("connection_reservation_failed", t("Não foi possível verificar uma conexão em andamento."), 503, { requestId });
+    }
+
+    if (!waha) {
+      wahaCleanup = "pendente";
+      arquivar = true;
+      patch.status_reason = "remote_cleanup_pending";
+      logger.warn("WAHA não configurado durante exclusão; canal será arquivado localmente", {
+        requestId,
+        channel_session_id: id,
+        organization_id: activeOrg.orgId,
+      });
+    } else {
+      try {
+        await waha.logoutSession(session.waha_session_name as string);
+        await waha.deleteSession(session.waha_session_name as string);
+        wahaCleanup = "concluida";
+        patch.status_reason = null;
+      } catch (err) {
+        // O canal sai do produto mesmo assim. Arquivar (em vez de hard delete)
+        // deixa um tombstone para auditoria/reparo e impede que um remoto órfão
+        // apague nossa única referência ao que ficou pendente.
+        wahaCleanup = "pendente";
+        arquivar = true;
+        patch.status_reason = "remote_cleanup_pending";
+        logger.warn("WAHA indisponível durante exclusão; canal arquivado com limpeza remota pendente", {
+          requestId,
+          channel_session_id: id,
+          organization_id: activeOrg.orgId,
+          erro: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   } else {
     // ─── O OVERRIDE NÃO FICA ÓRFÃO NA META (issue #1334) ─────────────────────
@@ -507,10 +560,19 @@ export async function DELETE(
       provider: session.provider,
       avisos_fechados: avisosFechados,
       webhook_override: webhookOverride,
+      waha_cleanup: wahaCleanup,
       ...impact.history,
       ...impact.configuration,
     },
   });
 
-  return ok({ id, archived: arquivar, impact }, { requestId });
+  return ok(
+    {
+      id,
+      archived: arquivar,
+      impact,
+      remote_cleanup_pending: wahaCleanup === "pendente",
+    },
+    { requestId },
+  );
 }
