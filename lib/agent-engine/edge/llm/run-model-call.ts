@@ -669,6 +669,13 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       maxOutputTokens: input.maxOutputTokens === undefined
         ? maxOutputTokens
         : Math.min(maxOutputTokens ?? Infinity, input.maxOutputTokens),
+      // GPT-OSS usa reasoning por padrão. Na Groq, esforço baixo evita consumir
+      // toda a saída em raciocínio antes de chegar à resposta/tool call,
+      // especialmente no free tier com TPM apertado.
+      providerOptions:
+        config.provider === 'groq'
+          ? { openai: { reasoningEffort: 'low' as const } }
+          : undefined,
     });
   } catch (err) {
     // ─── A LINHA QUE FALTAVA ────────────────────────────────────────────────
