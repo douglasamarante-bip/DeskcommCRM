@@ -84,6 +84,16 @@ export const PROVEDORES = [
     prefixoDaChave: "sk-or-…",
   },
   {
+    id: "groq",
+    rotulo: "Groq (GPT-OSS)",
+    quandoUsar:
+      "Opção rápida para atendimento com modelos hospedados pela Groq, incluindo o GPT-OSS 20B.",
+    aceitaEndpointProprio: false,
+    catalogoSincronizavel: false,
+    ondePegarAChave: "https://console.groq.com/keys",
+    prefixoDaChave: "gsk_…",
+  },
+  {
     id: "deepseek",
     rotulo: "DeepSeek",
     quandoUsar:
