@@ -83,6 +83,7 @@ export const PROVEDORES = [
     ondePegarAChave: "https://openrouter.ai/keys",
     prefixoDaChave: "sk-or-…",
   },
+  // Groq usa o endpoint OpenAI-compatível, mas é provedor próprio no CRM.
   {
     id: "groq",
     rotulo: "Groq (GPT-OSS)",
