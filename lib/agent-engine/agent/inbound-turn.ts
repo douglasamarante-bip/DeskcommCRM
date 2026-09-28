@@ -3741,7 +3741,11 @@ async function executarTurnoDoAgente(
   // ver edge/crm/mcp-tools.ts). As 8 tools do engine têm precedência de nome.
   let mcpCleanup: (() => Promise<void>) | null = null;
   try {
-    if (agentConfig !== null && agentConfig.toolIds.length > 0) {
+    if (
+      agentConfig !== null &&
+      agentConfig.toolIds.length > 0 &&
+      preview?.kind !== 'sandbox'
+    ) {
       try {
         // As de OPERAÇÃO saem antes de serem montadas, quando o Operador as tem.
         // Medido: são elas que carregavam 2 dos 3 vazamentos (o DADO que devolvem),
@@ -4075,7 +4079,7 @@ async function executarTurnoDoAgente(
         maxSteps,
         // O dry-run é diagnóstico, não uma conversa longa. Limitar a saída
         // preserva a cota TPM do provedor sem alterar o atendimento real.
-        ...(preview ? { maxOutputTokens: 512 } : {}),
+        ...(preview ? { maxOutputTokens: 1024 } : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,
