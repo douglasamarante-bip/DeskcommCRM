@@ -54,6 +54,20 @@ export const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com';
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1';
 
 /**
+ * Versões antigas do editor chegaram a persistir o rótulo visível do modelo
+ * em vez do model_id. O runtime normaliza somente os aliases conhecidos para
+ * não transformar ids arbitrários silenciosamente.
+ */
+export function normalizarModeloGroq(modelId: string): string {
+  const id = modelId.trim();
+  const alias = id.toLowerCase();
+  if (alias === 'gpt-oss 20b (groq)' || alias === 'gpt-oss 20b') {
+    return 'openai/gpt-oss-20b';
+  }
+  return id;
+}
+
+/**
  * Cabeçalhos OPCIONAIS de atribuição da OpenRouter.
  *
  * A doc deles chama `HTTP-Referer` e `X-Title` de "optional headers to identify
@@ -184,7 +198,7 @@ export function createDefaultRegistry(opts?: {
         baseURL: endpoint,
         fetch: contain(endpoint),
       });
-      return provider.chat(modelId);
+      return provider.chat(normalizarModeloGroq(modelId));
     },
     openrouter: (apiKey, modelId, baseUrl) => {
       const endpoint = baseUrl ?? OPENROUTER_ENDPOINT;
