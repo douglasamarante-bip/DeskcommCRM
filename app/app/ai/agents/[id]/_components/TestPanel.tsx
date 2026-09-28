@@ -68,6 +68,36 @@ interface TestResponse {
  * que tinha visto o comportamento real. Mostrar "não verificado" em voz alta é o
  * conserto — silêncio que parece aprovação foi o defeito.
  */
+function rotuloStatusDoTeste(
+  result: TestResponse["data"],
+  t: (texto: string) => string,
+): string {
+  const temResposta = Boolean(result.final_text?.trim());
+  const temAcoes = Boolean(result.proposals?.length);
+  const temImpedimentos = Boolean(result.impediments?.length);
+
+  if (result.status === "ok") return t("Resposta pronta");
+  if (result.status === "blocked") {
+    if (temAcoes && !temResposta && !temImpedimentos) return t("Ação proposta (sem envio)");
+    if (temImpedimentos) return t("Bloqueado por regra");
+    if (!temResposta) return t("Sem mensagem para envio");
+  }
+  return result.status;
+}
+
+function nomeDaAcao(tool: string, t: (texto: string) => string): string {
+  const nomes: Record<string, string> = {
+    schedule_followup: t("Agendar acompanhamento"),
+    update_lead_state: t("Atualizar etapa do lead"),
+    save_lead_note: t("Salvar nota do lead"),
+    request_human_handoff: t("Encaminhar para atendimento humano"),
+    open_human_case: t("Abrir caso para humano"),
+    provide_case_update: t("Atualizar caso humano"),
+    send_template: t("Enviar template"),
+  };
+  return nomes[tool] ?? tool;
+}
+
 function Verificacoes({ g }: { g: NonNullable<TestResponse["data"]["guardrails"]> }) {
   const t = useT();
   return (
@@ -288,7 +318,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
             ) : null}
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <Cell label={t("Status")}>{result.status}</Cell>
+              <Cell label={t("Status")}>{rotuloStatusDoTeste(result, t)}</Cell>
               <Cell label={t("Latência")}>
                 {typeof result.latency_ms === "number" ? `${result.latency_ms}ms` : "—"}
               </Cell>
@@ -299,11 +329,70 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
               <Cell label={t("Custo (cents)")}>{result.cost_cents ?? "—"}</Cell>
             </div>
 
-            <RunTrace
-              toolCalls={result.tool_calls}
-              finalText={result.final_text ?? null}
-              emptyMessage={t("Sem tool calls (resposta direta do LLM).")}
-            />
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-primary">
+                {t("Resposta da IA")}
+              </p>
+              {result.final_text?.trim() ? (
+                <p className="whitespace-pre-wrap">{result.final_text}</p>
+              ) : (
+                <div className="space-y-1 text-muted-foreground">
+                  <p>{t("A IA processou a mensagem, mas não gerou uma mensagem para o cliente neste turno.")}</p>
+                  {!!result.proposals?.length ? (
+                    <p>
+                      {t(
+                        "Ela propôs uma ação. No modo teste, essa ação não é executada e aparece separadamente abaixo.",
+                      )}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            {!!result.proposals?.length ? (
+              <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
+                <p className="mb-2 font-medium">{t("Ações propostas pela IA")}</p>
+                <div className="space-y-2">
+                  {result.proposals.map((acao, i) => (
+                    <details key={`${acao.tool}-${i}`} className="rounded border border-border/60 px-2 py-1">
+                      <summary className="cursor-pointer font-medium">
+                        {nomeDaAcao(acao.tool, t)}
+                        <span className="ml-2 font-mono text-muted-foreground">({acao.tool})</span>
+                      </summary>
+                      <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 font-mono">
+                        {JSON.stringify(acao.arguments, null, 2)}
+                      </pre>
+                    </details>
+                  ))}
+                </div>
+                <p className="mt-2 text-muted-foreground">
+                  {t("Modo teste: nenhuma dessas ações é executada no cliente.")}
+                </p>
+              </div>
+            ) : null}
+
+            {!!result.impediments?.length ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+                <p className="mb-2 font-medium text-amber-700 dark:text-amber-400">
+                  {t("Bloqueios e regras aplicadas")}
+                </p>
+                <div className="space-y-1">
+                  {result.impediments.map((x, i) => (
+                    <p role="status" key={i}>
+                      <span className="font-mono">{x.code}</span>: {x.message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {!result.candidates ? (
+              <RunTrace
+                toolCalls={result.tool_calls}
+                finalText={null}
+                emptyMessage={t("Sem trace disponível.")}
+              />
+            ) : null}
 
             {result.candidates ? (
               <div className="space-y-2 text-xs">
@@ -325,23 +414,6 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
                     </pre>
                   </details>
                 ))}
-                {result.impediments?.map((x, i) => (
-                  <p role="status" key={i}>
-                    {x.message}
-                  </p>
-                ))}
-                {!!result.proposals?.length && (
-                  <div>
-                    <p className="font-medium">
-                      {t("Ações propostas: precisam de autorização separada")}
-                    </p>
-                    <ul>
-                      {result.proposals.map((x, i) => (
-                        <li key={i}>{x.tool}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             ) : result.guardrails ? (
               <Verificacoes g={result.guardrails} />
