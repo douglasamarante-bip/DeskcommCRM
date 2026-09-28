@@ -32,6 +32,7 @@ import { generateText, stepCountIs, type LanguageModel, type StopCondition, type
 import {
   cabecalhosDeAtribuicaoOpenRouter,
   DEEPSEEK_ENDPOINT,
+  GROQ_ENDPOINT,
   OPENROUTER_ENDPOINT,
 } from "@/lib/agent-engine/edge/llm/providers";
 import { CredentialUnavailableError, loadCredential } from "@/lib/ai/credentials";
@@ -184,6 +185,8 @@ export function buildModel(provider: string, apiKey: string, modelId: string): L
         baseURL: OPENROUTER_ENDPOINT,
         headers: cabecalhosDeAtribuicaoOpenRouter(),
       }).chat(modelId); // chat/completions: a OpenRouter não serve /responses para todo modelo (#1130)
+    case "groq":
+      return createOpenAI({ apiKey, baseURL: GROQ_ENDPOINT }).chat(modelId);
     // Mesma fábrica OpenAI-compatível que o registry de produção usa. Sem este
     // caso, o dono que publicou em DeepSeek receberia `unsupported_provider` no
     // ensaio enquanto o worker responderia a mensagem real — ensaio mais
