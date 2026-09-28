@@ -50,6 +50,9 @@ export const OPENROUTER_ENDPOINT = process.env.OPENROUTER_BASE_URL?.trim() || 'h
  */
 export const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com';
 
+/** Groq expõe uma API compatível com OpenAI Chat Completions. */
+export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1';
+
 /**
  * Cabeçalhos OPCIONAIS de atribuição da OpenRouter.
  *
@@ -174,6 +177,15 @@ export function createDefaultRegistry(opts?: {
      * endpoint canônico faria o egress bloquear a própria configuração que a
      * tela ofereceu, com erro de rede que ninguém liga ao painel.
      */
+    groq: (apiKey, modelId) => {
+      const endpoint = GROQ_ENDPOINT;
+      const provider = createOpenAI({
+        apiKey,
+        baseURL: endpoint,
+        fetch: contain(endpoint),
+      });
+      return provider.chat(modelId);
+    },
     openrouter: (apiKey, modelId, baseUrl) => {
       const endpoint = baseUrl ?? OPENROUTER_ENDPOINT;
       const provider = createOpenAI({
