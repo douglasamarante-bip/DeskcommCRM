@@ -211,10 +211,11 @@ export const AGENT_TOOL_DEFS = {
       body: z.string().min(1).describe('corpo da mensagem, em pt-br, pronto para envio'),
       produto_codigo: z
         .string()
+        .nullable()
         .optional()
         .describe(
           'código de um produto do catálogo (o `codigo` de crm_search_products) que tem `fotos`: ' +
-            'as fotos dele vão junto, e o texto vira a legenda da primeira',
+            'as fotos dele vão junto, e o texto vira a legenda da primeira. Se não houver produto, omita ou use null.',
         ),
     }),
   },
@@ -2974,7 +2975,7 @@ async function executarTurnoDoAgente(
         // segue (degradar para só texto). Ver `agent/fotos-do-produto.ts`.
         let fotosDoProduto: FotoParaEnvio[] = [];
         let fotosQueFaltaram = 0;
-        if (produto_codigo !== undefined && produto_codigo.trim() !== '' && !preview) {
+        if (typeof produto_codigo === 'string' && produto_codigo.trim() !== '' && !preview) {
           const preparadas = await prepararFotosDoProduto(pool, copiarFotoNoStorage(runLog), {
             tenantId,
             conversationId: input.conversationId,
@@ -3277,7 +3278,9 @@ async function executarTurnoDoAgente(
                 ok: true,
                 status: 'enviada',
                 message_id: outcome.messageId,
-                ...(produto_codigo !== undefined ? { fotos_enviadas: fotosDoProduto.length } : {}),
+                ...(typeof produto_codigo === 'string' && produto_codigo.trim() !== ''
+                  ? { fotos_enviadas: fotosDoProduto.length }
+                  : {}),
                 ...(fotosQueFaltaram > 0
                   ? {
                       aviso: `${fotosQueFaltaram} foto(s) do produto não puderam ser enviadas; o texto foi. Não diga ao cliente que mandou essas fotos.`,
