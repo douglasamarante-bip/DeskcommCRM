@@ -3899,7 +3899,7 @@ async function executarTurnoDoAgente(
     // guardrail depende de ordem entre os dois, e o `jailbreak` segue sem vetar
     // o inbound — só flagra o turno no trace.
     const [stageResultado, jailbreakVerdict] = await Promise.all([
-      deps.knobs.stageClassifier !== undefined
+      preview?.kind !== 'sandbox' && deps.knobs.stageClassifier !== undefined
         ? classifyStage(
             pool,
             deps.llmCfg,
@@ -3916,6 +3916,7 @@ async function executarTurnoDoAgente(
       // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
       // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
       // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
+      preview?.kind !== 'sandbox' &&
       camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
         ? classifyJailbreak(
             pool,
@@ -4072,6 +4073,9 @@ async function executarTurnoDoAgente(
         messages: openingMessages,
         tools,
         maxSteps,
+        // O dry-run é diagnóstico, não uma conversa longa. Limitar a saída
+        // preserva a cota TPM do provedor sem alterar o atendimento real.
+        ...(preview ? { maxOutputTokens: 512 } : {}),
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,
@@ -4178,6 +4182,20 @@ async function executarTurnoDoAgente(
       deps.knobs.prune !== undefined
         ? pruneToolResults(turn.result.response.messages, deps.knobs.prune)
         : turn.result.response.messages;
+
+    // No sandbox, a resposta/candidatos já são o resultado que a tela precisa.
+    // O checkpoint é um artefato durável do atendimento REAL e exigiria uma
+    // segunda chamada ao provedor — isso estoura a cota TPM gratuita da Groq
+    // sem acrescentar nada ao teste visual.
+    if (preview?.kind === 'sandbox') {
+      preview.result.restrictions.push('preview_checkpoint_skipped');
+      if (preview.result.candidates.length === 0 && preview.result.impediments.length === 0)
+        preview.result.impediments.push({
+          code: 'no_candidate',
+          message: 'O agente não propôs uma resposta. Revise o cenário ou a configuração.',
+        });
+      return;
+    }
 
     // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
     //
