@@ -1,5 +1,6 @@
 -- Groq + GPT-OSS 20B
 -- Additive and idempotent. Provider CHECK constraints were opened by migration 0127.
+-- Runtime: Groq via OpenAI-compatible Chat Completions.
 
 insert into public.ai_models (
   provider,
