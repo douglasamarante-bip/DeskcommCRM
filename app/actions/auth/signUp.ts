@@ -91,7 +91,10 @@ export async function signUp(
   }
 
   const hdrs = await headers();
-  const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
+  // Links de e-mail precisam apontar para a URL canônica pública da instalação.
+  // Usar o header Origin aqui permitia que proxy/teste interno gerasse
+  // confirmação/recovery em localhost.
+  const origin = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
   const requestId = hdrs.get("x-request-id");
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
