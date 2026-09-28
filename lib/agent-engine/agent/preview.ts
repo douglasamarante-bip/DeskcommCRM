@@ -70,6 +70,27 @@ export async function previewGateContext(
   const cfg = channel
     ? await loadChannelKnobs(db, org, channel, log)
     : { knobs: PACING_DEFAULTS, numberActivatedAt: null };
+
+  // O sandbox testa a decisão/conversa do agente, não a disponibilidade operacional
+  // do canal naquele minuto. Se ele herdar a janela real (ex.: 07h–22h), um teste
+  // feito de madrugada ensina o modelo a agendar follow-up em vez de mostrar a
+  // resposta que o operador está tentando validar. O atendimento real NÃO passa
+  // por este override: só o sandbox abre a janela para 24h.
+  const pacingKnobs =
+    p.kind === 'sandbox'
+      ? {
+          ...cfg.knobs,
+          windowStartHour: 0,
+          windowEndHour: 24,
+          allowSunday: true,
+          throttleMs: 0,
+          jitterMaxMs: 0,
+        }
+      : cfg.knobs;
+
+  if (p.kind === 'sandbox') {
+    p.result.restrictions.push('sandbox_ignores_send_window_and_throttle');
+  }
   const spinning = channel ? await loadSpinningKnobs(db, org, channel, log) : SPINNING_DEFAULTS;
   const promise = await loadPromiseTable(db, org),
     disclosure = await loadDisclosureTemplate(db, org);
@@ -93,11 +114,11 @@ export async function previewGateContext(
     provider: channel ? await loadChannelProvider(db, org, channel) : DEFAULT_CHANNEL_PROVIDER,
     messagingWindow: { lastInboundAt: lastInbound },
     pacing: {
-      knobs: cfg.knobs,
+      knobs: pacingKnobs,
       state: channel
         ? await loadPacingState(db, org, channel, {
             now,
-            timezone: cfg.knobs.timezone,
+            timezone: pacingKnobs.timezone,
             numberActivatedAt: cfg.numberActivatedAt,
           })
         : { lastSentAt: null, sentToday: 0, numberActivatedAt: null },
