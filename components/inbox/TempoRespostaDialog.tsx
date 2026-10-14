@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Clock } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { formatarTempoPrimeiraResposta } from "@/lib/metrics/tempo-primeira-resposta";
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,18 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-/** Exibe duração sem arredondar minutos para zero ou ocultar as horas. */
-export function formatarTempoPrimeiraResposta(seconds: number | null): string {
-  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return "—";
-  const total = Math.round(seconds);
-  if (total < 60) return `${total}s`;
-  const horas = Math.floor(total / 3600);
-  const minutos = Math.floor((total % 3600) / 60);
-  const segundos = total % 60;
-  if (horas > 0) return `${horas}h ${String(minutos).padStart(2, "0")}min`;
-  return segundos ? `${minutos}min ${String(segundos).padStart(2, "0")}s` : `${minutos}min`;
-}
 
 function nomeDoVendedor(vendedor: AttendantMetric, t: (s: string) => string): string {
   return vendedor.name ?? vendedor.email ?? `${t("Atendente")} ${vendedor.user_id.slice(0, 8)}`;
