@@ -425,24 +425,28 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
       >
         <InboxFilters value={filterValue} onChange={setFilterValue} />
-        <div className="border-b border-border px-3 py-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 w-full gap-2 rounded-lg text-xs font-medium"
-            onClick={() => setTempoRespostaAberto(true)}
-            aria-label={t("Ver tempo de resposta dos vendedores")}
-          >
-            <Clock size={16} aria-hidden />
-            {t("Tempo de resposta")}
-          </Button>
-        </div>
-        {tempoRespostaAberto ? (
-          <TempoRespostaDialog
-            open={tempoRespostaAberto}
-            onOpenChange={setTempoRespostaAberto}
-          />
+        {activeOrg?.role && activeOrg.role !== "viewer" ? (
+          <>
+            <div className="border-b border-border px-3 py-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-11 w-full gap-2 rounded-lg text-xs font-medium lg:h-8"
+                onClick={() => setTempoRespostaAberto(true)}
+                aria-label={t("Ver tempo de resposta dos vendedores")}
+              >
+                <Clock size={16} aria-hidden />
+                {t("Tempo de resposta")}
+              </Button>
+            </div>
+            {tempoRespostaAberto ? (
+              <TempoRespostaDialog
+                open={tempoRespostaAberto}
+                onOpenChange={setTempoRespostaAberto}
+              />
+            ) : null}
+          </>
         ) : null}
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
